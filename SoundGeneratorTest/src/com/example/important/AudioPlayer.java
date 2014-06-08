@@ -13,11 +13,12 @@ import android.media.AudioTrack;
 
 public class AudioPlayer {
 	private final static String TAG = "AudioPlayer";
-
+	private Panel panel;
 	private AudioTrack audiotrack;
 	private int state;
 	List<Integer> indexesOfSigns;
-	private BlockingQueue<Buffer> queueWithData;
+	private ArrayList<Buffer> queueWithDataAL;
+	// private BlockingQueue<Buffer> queueWithData;
 	MyObserver observer;
 	byte[] audioData;
 
@@ -27,6 +28,8 @@ public class AudioPlayer {
 		void stopStatus();
 	}
 
+	
+	
 	public AudioPlayer(int sampleRate) {
 
 		int minSize = AudioTrack.getMinBufferSize(sampleRate,
@@ -35,8 +38,8 @@ public class AudioPlayer {
 		audiotrack = new AudioTrack(AudioManager.STREAM_MUSIC, sampleRate,
 				AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT,
 				minSize, AudioTrack.MODE_STREAM);
-
-		queueWithData = new LinkedBlockingQueue<Buffer>(4);
+		queueWithDataAL = new ArrayList<Buffer>();
+		// queueWithData = new LinkedBlockingQueue<Buffer>(4);
 		indexesOfSigns = new ArrayList<Integer>();
 		state = Constants.STOP_STATE;
 	}
@@ -58,15 +61,17 @@ public class AudioPlayer {
 			state = Constants.START_STATE;
 			int startLength = 0;
 			while (state == Constants.START_STATE) {
-				Buffer buffer = getBufferFromQueue();
+				Buffer buffer = getBufferFromQueueAL();
 				MessagesLog.d(TAG, "Pobiera");
 				if (buffer != null) {
 					byte[] data = buffer.getBuffer();
 					int sizeOfData = buffer.getBufferSize();
+					int[] dataValues = buffer.getBufferValues();
 					if (data != null) {
 						int len = audiotrack.write(data, 0, sizeOfData);
 						if (startLength == 0) {
 							audiotrack.play();
+//							state = Constants.STOP_STATE;
 						}
 						startLength += len;
 					} else {
@@ -96,25 +101,43 @@ public class AudioPlayer {
 
 		for (int index : inofsign) {
 			int n = Constants.BITS_16 / 2;
-			int totalCount = (Constants.DEFAULT_GEN_DURATION * Constants.SAMPLING) / 1000;
+//			int totalCount = (Constants.DEFAULT_GEN_DURATION * Constants.SAMPLING) / 1000;
+			int numSamples = Constants.DEFAULT_NUM_SAMPLES;
 			double per = (Constants.FREQUENCIES[index] / (double) Constants.SAMPLING)
 					* 2 * Math.PI;
 			double d = 0;
 			Buffer buffer = new Buffer();
 			byte[] bufferData = new byte[Constants.DEFAULT_BUFFER_SIZE];
+			int[] bufferValues = new int[Constants.SAMPLING]; 
 			int indexInBuffer = 0;
-			for (int i = 0; i < totalCount; ++i) {
-				int out = (int) (Math.sin(d) * n) + 128;
+			int ramp = numSamples / 20;
+			for (int i = 0; i < numSamples; ++i) {
+//				int out = (int) (Math.sin(d) * n) + 128;
+				
+				
+				double out = (double) (Math.sin(Constants.FREQUENCIES[index] * 2 * Math.PI  * i / Constants.SAMPLING) );
 				if (indexInBuffer >= Constants.DEFAULT_BUFFER_SIZE - 1) {
 					buffer.setBuffer(bufferData);
 					buffer.setBufferSize(indexInBuffer);
-					setBufferToQueue(buffer);
+					buffer.setBufferValues(bufferValues);
+					buffer.setBufferValuesSize(i);
+					setBufferToQueueAL(buffer);
 					bufferData = new byte[Constants.DEFAULT_BUFFER_SIZE];
 					indexInBuffer = 0;
 				}
-
-				bufferData[indexInBuffer++] = (byte) (out & 0xff);
-				bufferData[indexInBuffer++] = (byte) ((out >> 8) & 0xff);
+				
+				
+				final short val;
+				if(i < ramp){
+					val = (short) ((out * n * i / ramp));					
+				}else if(i < numSamples - ramp){
+					val = (short) ((out * n));
+				}else{
+					val = (short) ((out * n * (numSamples-i)/ramp));
+				}
+				bufferValues[i] = val;
+				bufferData[indexInBuffer++] = (byte) (val & 0x00ff);
+				bufferData[indexInBuffer++] = (byte) ((val & 0xff00) >>> 8);
 
 				d += per;
 
@@ -122,32 +145,50 @@ public class AudioPlayer {
 
 			buffer.setBuffer(bufferData);
 			buffer.setBufferSize(indexInBuffer);
-			setBufferToQueue(buffer);
+			buffer.setBufferValues(bufferValues);
+			buffer.setBufferValuesSize(indexInBuffer/2);
+			setBufferToQueueAL(buffer);
 
 			indexInBuffer = 0;
 		}
 
 	}
 
-	private void setBufferToQueue(Buffer buffer) {
-		try {
-			queueWithData.put(buffer);
-		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+//	private void setBufferToQueue(Buffer buffer) {
+//		try {
+//			queueWithData.put(buffer);
+//		} catch (InterruptedException e) {
+//			// TODO Auto-generated catch block
+//			e.printStackTrace();
+//		}
+//	}
+
+	private void setBufferToQueueAL(Buffer buffer) {
+		queueWithDataAL.add(buffer);
 	}
 
-	private Buffer getBufferFromQueue() {
-		if (queueWithData != null) {
-			try {
-				return queueWithData.take();
-			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
+//	private Buffer getBufferFromQueue() {
+//		if (queueWithData != null) {
+//			try {
+//				return queueWithData.take();
+//			} catch (InterruptedException e) {
+//				// TODO Auto-generated catch block
+//				e.printStackTrace();
+//			}
+//		}
+//		return null;
+//	}
+
+	private Buffer getBufferFromQueueAL() {
+
+		if (queueWithDataAL.size() > 0) {
+			Buffer buffer = queueWithDataAL.get(0);
+			queueWithDataAL.remove(0);
+			return buffer;
+
 		}
 		return null;
+
 	}
 
 	public void setObserver(MyObserver o) {
@@ -158,7 +199,8 @@ public class AudioPlayer {
 	public void stop() {
 		if (state == Constants.START_STATE) {
 			state = Constants.STOP_STATE;
-			queueWithData.clear();
+			queueWithDataAL.clear();
+//			queueWithData.clear();
 		}
 	}
 }

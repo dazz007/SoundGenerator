@@ -38,7 +38,7 @@ public class MainActivity extends Activity {
             @Override
             public void onClick(View arg0) {
 //            	 String text = genText(7);
-                String text = "45232FEA10234566774342112232344545456666";
+                String text = "123456789234021389638726387623875645463548356845436576546537654836946493864";
                 MessagesLog.d(TAG, "Kliknalem");
                 playTextView.setText(text);
                 soundgen.setTextToEncode(text);

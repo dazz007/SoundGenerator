@@ -52,5 +52,8 @@
 	        android:text="play text" />
 
 	    </LinearLayout>
-
+	<com.example.important.Panel android:id="@+id/SurfaceView01" android:layout_width="wrap_content"
+ 
+android:layout_height="wrap_content" android:maxHeight="40dip">
+</com.example.important.Panel>
 </LinearLayout>
